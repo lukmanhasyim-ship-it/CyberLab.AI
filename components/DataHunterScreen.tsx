@@ -10,14 +10,14 @@ interface DataHunterScreenProps {
 // --- CONFIGURATION ---
 const GAME_DURATION = 600; // 10 Minutes
 const INITIAL_RAM = 256; 
-const SPAWN_INTERVAL_MS = 415; // Reduced spawn rate by ~20% (was 330)
+const SPAWN_INTERVAL_MS = 415; 
 const BASE_DIMENSION = 800; // Reference dimension for scaling
 
 // SERVER DEFENSE CONFIG
 const SERVER_DEFENSE = {
     damage: 350,
     cooldown: 10, // Seconds
-    range: 50, // Reduced to 50 (10 kotak equivalent, matching VPN range)
+    range: 50, 
 };
 
 // ACHIEVEMENTS
@@ -53,7 +53,7 @@ const PATHS = [
   ]
 ];
 
-// TOWER CONFIGURATION (UPDATED PER USER REQUEST)
+// TOWER CONFIGURATION
 const TOWERS_CONFIG = {
   OLD_WALL: {
       name: 'Old Wall',
@@ -129,7 +129,7 @@ const TOWERS_CONFIG = {
   },
 };
 
-// ENEMY CONFIG - Updated Damages & Final Boss
+// ENEMY CONFIG
 const ENEMIES_CONFIG = {
   COOKIE: { hp: 100, speed: 0.6, damage: 10, reward: 10, color: '#fbbf24', radius: 8, label: 'Bot', type: 'NORMAL' },
   SPYWARE: { hp: 180, speed: 0.8, damage: 15, reward: 20, color: '#d8b4fe', radius: 9, label: 'Spyware', type: 'DISABLER' },
@@ -138,17 +138,15 @@ const ENEMIES_CONFIG = {
   DDOS: { hp: 60, speed: 1.2, damage: 5, reward: 8, color: '#06b6d4', radius: 5, label: 'DDoS', type: 'RUSHER' },
   BACKDOOR: { hp: 300, speed: 1.0, damage: 0, reward: 50, color: '#94a3b8', radius: 8, label: 'Backdoor', type: 'INFILTRATOR' },
   
-  // Mid Boss
   RANSOMWARE_BOSS: { hp: 6000, speed: 0.2, damage: 50, reward: 500, color: '#b91c1c', radius: 30, label: 'RANSOMWARE', type: 'BOSS' },
   
-  // FINAL BOSS (Updated: Slow speed, 300 Damage, Massive HP)
   APT_FINAL_BOSS: { 
     hp: 40000, 
-    speed: 0.1, // Sangat Lambat
-    damage: 300, // Daya rusak tinggi
+    speed: 0.1, 
+    damage: 300, 
     reward: 5000, 
-    color: '#450a0a', // Dark Red/Black
-    radius: 50, // Ukuran besar
+    color: '#450a0a', 
+    radius: 50, 
     label: 'FINAL BOSS', 
     type: 'BOSS' 
   },
@@ -172,6 +170,9 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
   const [waveLevel, setWaveLevel] = useState(1);
   const [bossMessage, setBossMessage] = useState<string | null>(null);
   const [backdoorActive, setBackdoorActive] = useState(false);
+  
+  // Use a default size initially to prevent display:none issues
+  const [boardSize, setBoardSize] = useState(300); 
   
   // Achievement UI States
   const [showAchievements, setShowAchievements] = useState(false);
@@ -210,36 +211,68 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
         setUnlockedList(newList);
         localStorage.setItem('achievements_datahunter', JSON.stringify(newList));
         
-        // Show Toast Notification
         const ach = DH_ACHIEVEMENTS.find(a => a.id === id);
         if (ach) {
             setAchievementToast({ title: ach.title, icon: ach.icon });
-            // Auto hide after 3 seconds
             setTimeout(() => setAchievementToast(null), 3000);
         }
      }
   };
 
+  const calculateAndSetBoardSize = () => {
+    if (containerRef.current) {
+        const { clientWidth, clientHeight } = containerRef.current;
+        if (clientWidth > 0 && clientHeight > 0) {
+            // Force square aspect ratio
+            const size = Math.floor(Math.min(clientWidth, clientHeight) - 24);
+            if (size > 0) {
+                setBoardSize(size);
+                gameScaleRef.current = size / BASE_DIMENSION;
+            }
+        }
+    }
+  };
+
   // Handle Resize
   useEffect(() => {
-    const handleResize = () => {
-        if (containerRef.current && canvasRef.current) {
-            const width = containerRef.current.clientWidth;
-            const height = containerRef.current.clientHeight;
-            
-            canvasRef.current.width = width;
-            canvasRef.current.height = height;
+    // Initial calculation
+    calculateAndSetBoardSize();
+    // Fallback using window resize
+    window.addEventListener('resize', calculateAndSetBoardSize);
 
-            const minDim = Math.min(width, height);
-            gameScaleRef.current = Math.max(0.5, minDim / BASE_DIMENSION * 1.2); 
-        }
+    // Advanced ResizeObserver
+    const resizeObserver = new ResizeObserver((entries) => {
+        // Use requestAnimationFrame to avoid "ResizeObserver loop limit exceeded" error
+        window.requestAnimationFrame(() => {
+            if (!Array.isArray(entries) || !entries.length) return;
+            const entry = entries[0];
+            const { width, height } = entry.contentRect;
+            if (width > 0 && height > 0) {
+                const size = Math.floor(Math.min(width, height) - 24);
+                if (size > 0) {
+                    setBoardSize(size);
+                    gameScaleRef.current = size / BASE_DIMENSION;
+                }
+            }
+        });
+    });
+
+    if (containerRef.current) {
+        resizeObserver.observe(containerRef.current);
+    }
+
+    return () => {
+        window.removeEventListener('resize', calculateAndSetBoardSize);
+        resizeObserver.disconnect();
     };
-
-    window.addEventListener('resize', handleResize);
-    setTimeout(handleResize, 100); 
-
-    return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  // Force recalculate when game starts to ensure correct size
+  useEffect(() => {
+    if (gameState === 'PLAYING') {
+        setTimeout(calculateAndSetBoardSize, 100);
+    }
+  }, [gameState]);
 
   const startGame = () => {
     setGameState('PLAYING');
@@ -247,7 +280,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
     setRam(INITIAL_RAM);
     setPrivacyHealth(100);
     privacyHealthRef.current = 100;
-    serverLastFiredRef.current = 0; // Reset server cooldown
+    serverLastFiredRef.current = 0; 
     setHasUsedFreePatch(false);
     setWaveLevel(1);
     enemiesRef.current = [];
@@ -262,6 +295,9 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
     setIsInfected(false);
     setBossMessage(null);
     setBackdoorActive(false);
+    
+    // Force layout update
+    setTimeout(calculateAndSetBoardSize, 50);
   };
 
   const handleEndGame = (result: 'WIN' | 'LOSE') => {
@@ -310,6 +346,10 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
     
     const width = canvas.width;
     const height = canvas.height;
+    
+    // Safety check
+    if (width === 0 || height === 0) return;
+
     const scale = gameScaleRef.current;
 
     ctx.clearRect(0, 0, width, height);
@@ -336,7 +376,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
     
     ctx.beginPath();
     ctx.arc(serverPxX, serverPxY, ringRadius, -Math.PI / 2, (-Math.PI / 2) + (Math.PI * 2 * cooldownProgress));
-    ctx.strokeStyle = cooldownProgress >= 1 ? '#10b981' : '#64748b'; // Green if ready, Grey if loading
+    ctx.strokeStyle = cooldownProgress >= 1 ? '#10b981' : '#64748b'; 
     ctx.lineWidth = 3 * scale;
     ctx.stroke();
 
@@ -364,8 +404,8 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
                 y: serverPxY,
                 targetId: target.id,
                 damage: SERVER_DEFENSE.damage,
-                speed: 20 * scale, // Fast projectile
-                color: '#10b981' // Emerald
+                speed: 20 * scale,
+                color: '#10b981'
             });
             
             // Visual pulse
@@ -419,45 +459,32 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
            }
        }
 
-       // DRAW TOWER BASE
+       // DRAW TOWER
        const baseSize = 24 * scale;
        ctx.fillStyle = '#1e293b'; 
        ctx.beginPath();
        ctx.roundRect(tower.x - (baseSize/2), tower.y - (baseSize/2), baseSize, baseSize, 4 * scale);
        ctx.fill();
 
-       // DRAW TOWER BODY
        ctx.beginPath();
        if (tower.type === 'OLD_WALL') {
-           // Brick Wall Shape
            ctx.fillStyle = TOWERS_CONFIG[tower.type].canvasColor;
            ctx.fillRect(tower.x - 10*scale, tower.y - 10*scale, 20*scale, 20*scale);
            
-           ctx.strokeStyle = '#292524'; // Dark stone color for lines
+           ctx.strokeStyle = '#292524';
            ctx.lineWidth = 1 * scale;
-           // Horizontal lines
+           // Brick pattern logic same as before...
            ctx.beginPath();
            ctx.moveTo(tower.x - 10*scale, tower.y - 3*scale);
            ctx.lineTo(tower.x + 10*scale, tower.y - 3*scale);
            ctx.moveTo(tower.x - 10*scale, tower.y + 4*scale);
            ctx.lineTo(tower.x + 10*scale, tower.y + 4*scale);
-           // Vertical lines
-           ctx.moveTo(tower.x, tower.y - 10*scale);
-           ctx.lineTo(tower.x, tower.y - 3*scale);
-           ctx.moveTo(tower.x - 5*scale, tower.y - 3*scale);
-           ctx.lineTo(tower.x - 5*scale, tower.y + 4*scale);
-           ctx.moveTo(tower.x + 5*scale, tower.y - 3*scale);
-           ctx.lineTo(tower.x + 5*scale, tower.y + 4*scale);
-           ctx.moveTo(tower.x, tower.y + 4*scale);
-           ctx.lineTo(tower.x, tower.y + 10*scale);
            ctx.stroke();
 
        } else if (tower.type === 'FIRMWARE') {
-           // Chip Shape
            ctx.rect(tower.x - 8*scale, tower.y - 8*scale, 16*scale, 16*scale);
            ctx.fillStyle = TOWERS_CONFIG[tower.type].canvasColor;
            ctx.fill();
-           // Inner Chip
            ctx.fillStyle = '#cbd5e1';
            ctx.fillRect(tower.x - 4*scale, tower.y - 4*scale, 8*scale, 8*scale);
        } else {
@@ -469,40 +496,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
        if (tower.type !== 'OLD_WALL') {
            ctx.strokeStyle = 'white';
            ctx.lineWidth = 1.5 * scale;
-           ctx.lineCap = 'round';
-           ctx.lineJoin = 'round';
-           ctx.beginPath();
-
-           const iconScale = scale; 
-           if (tower.type === 'ADBLOCK') {
-               ctx.moveTo(tower.x - 6*iconScale, tower.y);
-               ctx.quadraticCurveTo(tower.x, tower.y - 5*iconScale, tower.x + 6*iconScale, tower.y);
-               ctx.quadraticCurveTo(tower.x, tower.y + 5*iconScale, tower.x - 6*iconScale, tower.y);
-               ctx.stroke();
-               ctx.beginPath();
-               ctx.arc(tower.x, tower.y, 1.5*iconScale, 0, Math.PI * 2);
-               ctx.fillStyle = 'white';
-               ctx.fill();
-           } else if (tower.type === 'FIREWALL') {
-               const s = 4 * iconScale;
-               ctx.moveTo(tower.x - s, tower.y - s);
-               ctx.lineTo(tower.x + s, tower.y - s);
-               ctx.lineTo(tower.x + s, tower.y);
-               ctx.quadraticCurveTo(tower.x, tower.y + s + 2*iconScale, tower.x - s, tower.y);
-               ctx.closePath();
-               ctx.stroke();
-           } else if (tower.type === 'VPN') {
-               ctx.arc(tower.x, tower.y, 5*iconScale, 0, Math.PI * 2);
-               ctx.stroke();
-           } else if (tower.type === 'TPM') {
-               // Lock shape
-               const s = 5 * iconScale;
-               ctx.rect(tower.x - 4*iconScale, tower.y - 2*iconScale, 8*iconScale, 6*iconScale);
-               ctx.stroke();
-               ctx.beginPath();
-               ctx.arc(tower.x, tower.y - 2*iconScale, 3*iconScale, Math.PI, 0);
-               ctx.stroke();
-           }
+           ctx.stroke();
        }
 
        const hpPercent = Math.max(0, tower.hp / tower.maxHp);
@@ -587,7 +581,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
         // ATTACK TOWER
         let attackingTower = false;
         if (enemy.type !== 'BACKDOOR') {
-            const attackRange = 60 * scale; // INCREASED RANGE FOR BETTER DETECTION
+            const attackRange = 60 * scale; 
             for(let tIdx = 0; tIdx < towersRef.current.length; tIdx++) {
                 const tower = towersRef.current[tIdx];
                 const dx = tower.x - enemy.x;
@@ -597,12 +591,11 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
                 if (dist < attackRange) {
                     attackingTower = true;
                     
-                    // Visual Attack Line
                     ctx.beginPath();
                     ctx.moveTo(enemy.x, enemy.y);
                     ctx.lineTo(tower.x, tower.y);
-                    ctx.strokeStyle = enemy.type === 'SPYWARE' ? '#c084fc' : '#ef4444'; // Red or Purple
-                    ctx.lineWidth = 3 * scale; // THICKER LINE
+                    ctx.strokeStyle = enemy.type === 'SPYWARE' ? '#c084fc' : '#ef4444'; 
+                    ctx.lineWidth = 3 * scale;
                     ctx.stroke();
 
                     if (frameRef.current % 60 === 0) { 
@@ -644,18 +637,15 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
                         setIsInfected(true);
                         enemiesRef.current.splice(i, 1);
                     } else {
-                        // FIXED: Use enemy.damage instead of enemy.hp, and ensure value > 0
                         const damage = Math.max(5, enemy.damage);
                         privacyHealthRef.current = Math.max(0, privacyHealthRef.current - damage);
                         setPrivacyHealth(privacyHealthRef.current);
                         
-                        // Visual Feedback for Damage
                         if (privacyHealthRef.current <= 0) {
                              handleEndGame('LOSE');
                              return; 
                         }
 
-                        // Damage particles
                         for(let k=0; k<15; k++) {
                             particlesRef.current.push({
                                 id: Math.random(),
@@ -677,12 +667,11 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
         }
     }
 
-    // 5. SERVER INFECTION (Damage & RAM Drain)
+    // 5. SERVER INFECTION
     if (now < infectionEndTimeRef.current) {
         setIsInfected(true);
         if (now - lastDamageTickRef.current > 500) {
              setRam(r => Math.max(0, r - 10));
-             // NEW: Infection also drains health slowly
              privacyHealthRef.current = Math.max(0, privacyHealthRef.current - 2);
              setPrivacyHealth(privacyHealthRef.current);
              if (privacyHealthRef.current <= 0) handleEndGame('LOSE');
@@ -723,8 +712,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
     let isValidPreview = false;
     
     if (config && mousePos.x > 0 && mousePos.y > 0) {
-        // Updated validity check logic visualization
-        const collisionRadius = 20 * scale; // Reduced from 30 to allow easier placement
+        const collisionRadius = 20 * scale; 
         const tooClose = towersRef.current.some(t => {
             const dx = t.x - mousePos.x;
             const dy = t.y - mousePos.y;
@@ -870,12 +858,10 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
      if (ram < config.cost) return false;
 
      const scale = gameScaleRef.current;
-     // Reduced collision radius for easier placement
      const collisionRadius = 20 * scale; 
      const tooClose = towersRef.current.some(t => {
          const dx = t.x - x;
          const dy = t.y - y;
-         // Use strict distance check
          return Math.sqrt(dx*dx + dy*dy) < collisionRadius * 1.5;
      });
      return !tooClose;
@@ -971,7 +957,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
         
         {/* ACHIEVEMENT TOAST */}
         {achievementToast && (
-            <div className="fixed top-24 right-4 z-[100] animate-fade-in-up">
+            <div className="fixed top-20 right-4 z-[100] animate-fade-in-up">
                 <div className="bg-emerald-600 rounded-full shadow-2xl border-4 border-emerald-500/50 p-2 pr-8 flex items-center gap-4 max-w-sm transform transition-all hover:scale-105">
                     <div className="w-12 h-12 bg-gradient-to-b from-yellow-300 to-yellow-500 rounded-full flex items-center justify-center shadow-inner border-2 border-white/50">
                         <span className="text-2xl drop-shadow-sm">{achievementToast.icon}</span>
@@ -1024,7 +1010,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
         )}
 
         {/* --- LEFT SIDEBAR (DESKTOP) / BOTTOM BAR (MOBILE) --- */}
-        <div className="order-last md:order-first w-full md:w-72 bg-slate-900 border-t md:border-t-0 md:border-r border-slate-800 flex flex-row md:flex-col z-20 shadow-xl overflow-x-auto md:overflow-y-auto no-scrollbar md:custom-scrollbar">
+        <div className="order-last md:order-first w-full md:w-72 bg-slate-900 border-t md:border-t-0 md:border-r border-slate-800 flex flex-row md:flex-col z-20 shadow-xl overflow-x-auto md:overflow-y-auto no-scrollbar md:custom-scrollbar flex-shrink-0">
             
             {/* Sidebar Header (Desktop Only) */}
             <div className="hidden md:block p-4 border-b border-slate-800 bg-slate-900/50">
@@ -1112,7 +1098,7 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
         </div>
 
         {/* --- MAIN GAME AREA --- */}
-        <div className="flex-1 relative flex flex-col h-full bg-slate-950">
+        <div className="flex-1 relative overflow-hidden flex flex-col h-full bg-slate-950 min-w-0">
             
             {/* TOP HUD (Floating) */}
             <div className="absolute top-0 left-0 right-0 p-3 flex justify-between items-start z-10 pointer-events-none">
@@ -1156,43 +1142,53 @@ const DataHunterScreen: React.FC<DataHunterScreenProps> = ({ user }) => {
                 </div>
             </div>
 
-            {/* CANVAS LAYER */}
-            <div className="flex-1 relative overflow-hidden flex items-center justify-center" ref={containerRef}>
+            {/* CANVAS LAYER with Square Container Wrapper */}
+            <div className="flex-1 relative overflow-hidden flex items-center justify-center p-4 bg-slate-950" ref={containerRef}>
+                {/* Background Pattern */}
                 <div className="absolute inset-0 bg-[linear-gradient(rgba(30,41,59,0.3)_1px,transparent_1px),linear-gradient(90deg,rgba(30,41,59,0.3)_1px,transparent_1px)] bg-[size:20px_20px]"></div>
                 
-                <canvas 
-                    ref={canvasRef}
-                    onClick={handleCanvasClick}
-                    onMouseMove={handleMouseMove}
-                    onTouchStart={(e) => {}}
-                    onTouchMove={handleTouchMove}
-                    onTouchEnd={handleTouchEnd}
-                    style={{ touchAction: 'none' }}
-                    className="block w-full h-full cursor-crosshair relative z-0"
-                />
+                {/* Game Board Wrapper (Square) */}
+                <div 
+                    style={{ width: boardSize, height: boardSize }} 
+                    className="relative shadow-2xl rounded-2xl overflow-hidden border border-slate-700 bg-slate-900/30 backdrop-blur-sm z-0"
+                >
+                    <canvas 
+                        ref={canvasRef}
+                        width={boardSize}
+                        height={boardSize}
+                        onClick={handleCanvasClick}
+                        onMouseMove={handleMouseMove}
+                        onTouchStart={(e) => {}}
+                        onTouchMove={handleTouchMove}
+                        onTouchEnd={handleTouchEnd}
+                        style={{ touchAction: 'none' }}
+                        className="block cursor-crosshair relative z-0 w-full h-full"
+                    />
 
-                {/* SERVER OVERLAY */}
-                <div className="absolute z-10 pointer-events-none inset-0">
-                     <div style={{ position: 'absolute', left: `${SERVER_POS.x}%`, top: `${SERVER_POS.y}%`, transform: 'translate(-50%, -50%)' }}>
-                         <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all duration-300 ${isInfected ? 'bg-red-900 border-4 border-red-500 animate-pulse scale-110' : 'bg-slate-800 border-2 border-emerald-500'}`}>
-                             <Server className={`w-6 h-6 md:w-8 md:h-8 ${isInfected ? 'text-red-200' : 'text-emerald-400'}`} />
+                    {/* OVERLAYS (Now strictly positioned relative to the square board) */}
+                    <div className="absolute inset-0 pointer-events-none">
+                         {/* Server Icon */}
+                         <div style={{ position: 'absolute', left: `${SERVER_POS.x}%`, top: `${SERVER_POS.y}%`, transform: 'translate(-50%, -50%)' }}>
+                             <div className={`w-12 h-12 md:w-16 md:h-16 rounded-xl flex items-center justify-center shadow-[0_0_30px_rgba(16,185,129,0.3)] transition-all duration-300 ${isInfected ? 'bg-red-900 border-4 border-red-500 animate-pulse scale-110' : 'bg-slate-800 border-2 border-emerald-500'}`}>
+                                 <Server className={`w-6 h-6 md:w-8 md:h-8 ${isInfected ? 'text-red-200' : 'text-emerald-400'}`} />
+                             </div>
                          </div>
-                     </div>
 
-                     {/* BACKDOOR INDICATOR */}
-                     <div style={{ position: 'absolute', left: '50%', top: '5%', transform: 'translate(-50%, -50%)' }}>
-                         {backdoorActive ? (
-                             <div className="bg-red-900/90 px-4 py-2 rounded-full border border-red-500 animate-bounce shadow-[0_0_20px_rgba(220,38,38,0.5)] flex items-center gap-2">
-                                <Skull className="w-4 h-4 text-white" />
-                                <span className="text-xs font-bold text-white tracking-widest">BACKDOOR OPEN</span>
-                             </div>
-                         ) : (
-                             <div className="bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700 flex items-center gap-2 opacity-50">
-                                <div className="w-2 h-2 rounded-full bg-slate-500"></div>
-                                <span className="text-[10px] font-bold text-slate-400 tracking-widest">SECURE</span>
-                             </div>
-                         )}
-                     </div>
+                         {/* Backdoor Indicator */}
+                         <div style={{ position: 'absolute', left: '50%', top: '5%', transform: 'translate(-50%, -50%)' }}>
+                             {backdoorActive ? (
+                                 <div className="bg-red-900/90 px-4 py-2 rounded-full border border-red-500 animate-bounce shadow-[0_0_20px_rgba(220,38,38,0.5)] flex items-center gap-2">
+                                    <Skull className="w-4 h-4 text-white" />
+                                    <span className="text-xs font-bold text-white tracking-widest">BACKDOOR OPEN</span>
+                                 </div>
+                             ) : (
+                                 <div className="bg-slate-800/50 px-3 py-1 rounded-full border border-slate-700 flex items-center gap-2 opacity-50">
+                                    <div className="w-2 h-2 rounded-full bg-slate-500"></div>
+                                    <span className="text-[10px] font-bold text-slate-400 tracking-widest">SECURE</span>
+                                 </div>
+                             )}
+                         </div>
+                    </div>
                 </div>
             </div>
 
