@@ -29,6 +29,21 @@ const TOPIC_VIDEO_MAP: Record<string, string> = {
   "Tata cara pengamanan komunikasi data menggunakan teknik kriptografi": "NufPsj01dc0"
 };
 
+// Mapping Topik ke ID Video Youtube
+const TOPIC_VIDEO_MAP: Record<string, string> = {
+  "Kebutuhan persyaratan alat-alat untuk membangun server firewall": "V4zIUiC3e2c",
+  "Kebutuhan persyaratan alat-alat untuk membangun server autentifikasi": "JwFUn7ipwpM",
+  "Konsep dan implementasi firewall di host dan server": "LhkdN03yDTI",
+  "Fungsi dan cara kerja server autentifikasi": "uXfBt6pnpnU",
+  "Firewall pada host dan server": "MNwBYStyaPE",
+  "Fungsi dan tata cara pengamanan server-server layanan pada jaringan": "K8EfbNL1S5Q",
+  "Etika dan hukum siber (UU ITE 2024)": "qNskX8A5I90",
+  "Ancaman Serangan Jaringan (Advanced)": "S89LpW5Tbpw",
+  "Pemantauan keamanan & Intrusion Detection": "Ufy3N1a9bvU",
+  "Sistem Keamanan Jaringan Terpadu": "WiUc2HGI0oY",
+  "Tata cara pengamanan komunikasi data menggunakan teknik kriptografi": "NufPsj01dc0"
+};
+
 // Helper to clean formatting based on user requirements
 const formatContent = (text: string): string => {
   if (!text) return "";
@@ -116,6 +131,9 @@ Kaitkan dengan kehidupan sehari-hari siswa jika memungkinkan.
 
 REFERENSI MATERI (Gunakan jika relevan):
 ${REFERENCE_CONTEXT}
+
+REFERENSI MATERI (Gunakan jika relevan):
+${REFERENCE_CONTEXT}
 `;
 
 export const sendMessageToGemini = async (
@@ -125,6 +143,7 @@ export const sendMessageToGemini = async (
 ): Promise<string> => {
   try {
     const chat = ai.chats.create({
+      model: 'Gemini 2.5 Flash Lite',
       model: 'Gemini 2.5 Flash Lite',
       config: {
         systemInstruction: getSystemInstruction(user),
@@ -162,6 +181,9 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
       REFERENSI KURIKULUM:
       ${REFERENCE_CONTEXT}
 
+      REFERENSI KURIKULUM:
+      ${REFERENCE_CONTEXT}
+
       STRUKTUR SOAL (TOTAL 10):
       1. 8 Soal Pilihan Ganda (MCQ):
          - 2 Soal LOTS (Pengetahuan Dasar).
@@ -176,6 +198,7 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
     `;
 
     const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash lite',
       model: 'gemini-2.5-flash lite',
       contents: prompt,
       config: {
@@ -201,6 +224,8 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
     });
 
     if (response.text) {
+      const cleanText = cleanJson(response.text);
+      const questions = JSON.parse(cleanText) as QuizQuestion[];
       const cleanText = cleanJson(response.text);
       const questions = JSON.parse(cleanText) as QuizQuestion[];
       // Apply cleanup to questions and explanations
@@ -250,6 +275,7 @@ export const evaluateEssayAnswer = async (
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash lite lite',
+      model: 'gemini-2.5-flash lite lite',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -267,13 +293,20 @@ export const evaluateEssayAnswer = async (
     if (response.text) {
       const cleanText = cleanJson(response.text);
       const result = JSON.parse(cleanText);
+      const cleanText = cleanJson(response.text);
+      const result = JSON.parse(cleanText);
       return {
+        status: result.status,
+        feedback: formatContent(result.feedback)
         status: result.status,
         feedback: formatContent(result.feedback)
       };
     }
     throw new Error("Empty response from AI");
+    throw new Error("Empty response from AI");
   } catch (error) {
+    console.error("Gemini Essay Eval Error:", error);
+    return { status: 'PARTIAL', feedback: "Maaf, AI sedang sibuk. Jawabanmu sudah dicatat." };
     console.error("Gemini Essay Eval Error:", error);
     return { status: 'PARTIAL', feedback: "Maaf, AI sedang sibuk. Jawabanmu sudah dicatat." };
   }
@@ -301,6 +334,7 @@ export const analyzeLearningProgress = async (history: QuizHistory[], user: User
 
     const response = await ai.models.generateContent({
       model: 'gemini-2.5-flash lite',
+      model: 'gemini-2.5-flash lite',
       contents: prompt,
       config: {
         temperature: 0.7,
@@ -308,7 +342,9 @@ export const analyzeLearningProgress = async (history: QuizHistory[], user: User
     });
 
     return formatContent(response.text || "Belum cukup data untuk analisis.");
+    return formatContent(response.text || "Belum cukup data untuk analisis.");
   } catch (error) {
+    return "Analisis belum tersedia saat ini.";
     return "Analisis belum tersedia saat ini.";
   }
 };
