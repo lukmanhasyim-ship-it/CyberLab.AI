@@ -30,16 +30,11 @@ const LoginScreen: React.FC<LoginScreenProps> = ({ onLogin }) => {
       <div className="relative w-full max-w-md my-auto">
         <div className="glass-panel rounded-3xl shadow-2xl p-8 sm:p-10 transform transition-all hover:scale-[1.01] duration-500 border-t-4 border-t-emerald-500">
           <div className="flex justify-center mb-8">
-            <div className="relative">
-              <div className="absolute inset-0 bg-gradient-to-r from-emerald-500 to-yellow-400 rounded-2xl blur opacity-40 animate-pulse"></div>
-              <div className="relative bg-white p-4 rounded-2xl shadow-md border border-emerald-50">
-                <BookOpen className="w-10 h-10 sm:w-12 sm:h-12 text-emerald-600" />
-              </div>
-            </div>
+            <img src="/logo.png" alt="CyberLab.Ai Logo" className="w-24 h-24" />
           </div>
           
           <div className="text-center mb-10">
-              <h1 className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-emerald-700 to-emerald-500 mb-2 tracking-tight">
+              <h1 className="text-3xl sm:text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-emerald-700 to-emerald-500 mb-4">
               CyberLab.Ai
               </h1>
               <p className="text-gray-500 text-sm sm:text-base font-medium">

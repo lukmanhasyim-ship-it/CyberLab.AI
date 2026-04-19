@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import LoginScreen from './components/LoginScreen';
 import Dashboard from './components/Dashboard';
@@ -67,7 +66,7 @@ const App: React.FC = () => {
                        currentScreen === AppScreen.GAME_CENTER; // Center is also a "game" screen style
 
   return (
-    <div className="min-h-screen bg-slate-50 text-gray-900 font-sans flex flex-col relative overflow-hidden">
+    <div className="min-h-screen bg-slate-50 text-gray-900 font-sans flex flex-col relative">
       {/* Global Background Effects for Logged In State (Non-Game) */}
       {!isGameScreen && (
         <div className="fixed inset-0 z-0 pointer-events-none print:hidden">

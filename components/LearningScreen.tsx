@@ -142,6 +142,15 @@ const LearningScreen: React.FC<LearningScreenProps> = ({ user }) => {
       }, 100);
   }
 
+  // Helper to extract video ID safely
+  const getVideoId = (url: string) => {
+    if (!url) return "";
+    let id = url;
+    if (url.includes("v=")) id = url.split("v=")[1].split("&")[0];
+    else if (url.includes("youtu.be/")) id = url.split("youtu.be/")[1].split("?")[0];
+    return id.trim();
+  };
+
   // --- SMART CONTENT RENDERER ---
   const renderSmartContent = (text: string) => {
     if (!text) return null;
@@ -328,17 +337,19 @@ const LearningScreen: React.FC<LearningScreenProps> = ({ user }) => {
               <div className="mb-8 overflow-hidden rounded-2xl shadow-lg border border-gray-200 bg-black">
                 <div className="bg-gray-900 p-4 flex items-center gap-2 text-white border-b border-gray-800">
                    <PlayCircle className="w-5 h-5 text-red-500" />
-                   <span className="font-bold text-sm">Video Referensi: Etika Digital</span>
+                   <span className="font-bold text-sm">Video Pembelajaran</span>
                 </div>
-                <div className="aspect-video">
+                <div className="aspect-video relative">
                   <iframe 
                     width="100%" 
                     height="100%" 
-                    src={`https://www.youtube.com/embed/${material.youtubeUrl.split('v=')[1]}`} 
+                    src={`https://www.youtube.com/embed/${getVideoId(material.youtubeUrl)}?rel=0&playsinline=1`} 
                     title="YouTube video player" 
                     frameBorder="0" 
-                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" 
+                    allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" 
+                    referrerPolicy="strict-origin-when-cross-origin"
                     allowFullScreen
+                    className="absolute inset-0 w-full h-full"
                   ></iframe>
                 </div>
               </div>

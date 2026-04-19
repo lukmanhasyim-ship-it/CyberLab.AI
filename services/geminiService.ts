@@ -4,7 +4,7 @@ import { ChatMessage, QuizQuestion, UserProfile, QuizHistory, StudyMaterial, Gam
 import { learningTopics } from "../data/topics";
 
 // Initialize the client with the provided API Key.
-const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+const ai = new GoogleGenAI({ apiKey: "YOUR_API_KEY_GEMINI" });
 
 const REFERENCE_CONTEXT = `
 DASAR KURIKULUM & HUKUM (WAJIB DIGUNAKAN):
@@ -13,6 +13,21 @@ DASAR KURIKULUM & HUKUM (WAJIB DIGUNAKAN):
 3. UU No. 1 Tahun 2024 (Perubahan Kedua UU ITE).
 4. SKKNI Teknisi Jaringan Komputer No. 637 Tahun 2016.
 `;
+
+// Mapping Topik ke ID Video Youtube
+const TOPIC_VIDEO_MAP: Record<string, string> = {
+  "Kebutuhan persyaratan alat-alat untuk membangun server firewall": "V4zIUiC3e2c",
+  "Kebutuhan persyaratan alat-alat untuk membangun server autentifikasi": "JwFUn7ipwpM",
+  "Konsep dan implementasi firewall di host dan server": "LhkdN03yDTI",
+  "Fungsi dan cara kerja server autentifikasi": "uXfBt6pnpnU",
+  "Firewall pada host dan server": "MNwBYStyaPE",
+  "Fungsi dan tata cara pengamanan server-server layanan pada jaringan": "K8EfbNL1S5Q",
+  "Etika dan hukum siber (UU ITE 2024)": "qNskX8A5I90",
+  "Ancaman Serangan Jaringan (Advanced)": "S89LpW5Tbpw",
+  "Pemantauan keamanan & Intrusion Detection": "Ufy3N1a9bvU",
+  "Sistem Keamanan Jaringan Terpadu": "WiUc2HGI0oY",
+  "Tata cara pengamanan komunikasi data menggunakan teknik kriptografi": "NufPsj01dc0"
+};
 
 // Helper to clean formatting based on user requirements
 const formatContent = (text: string): string => {
@@ -33,18 +48,56 @@ const formatContent = (text: string): string => {
   const processedLines = lines.map(line => {
     const trimmed = line.trim();
     // Check for * or - at start of line
-    if (/^[\*\-]\s/.test(trimmed)) { 
-       // Replace symbol with number
-       const newLine = line.replace(/^(\s*)([\*\-])\s+/, `$1${count}. `);
-       count++;
-       return newLine;
+    if (/^[\*\-]\s/.test(trimmed)) {
+      // Replace symbol with number
+      const newLine = line.replace(/^(\s*)([\*\-])\s+/, `$1${count}. `);
+      count++;
+      return newLine;
     } else {
-       if (trimmed === '') count = 1; // Reset counter on empty lines (new section)
-       return line;
+      if (trimmed === '') count = 1; // Reset counter on empty lines (new section)
+      return line;
     }
   });
 
   return processedLines.join('\n');
+};
+
+// Helper to clean JSON string from Markdown code blocks or extra text
+const cleanJson = (text: string): string => {
+  let cleaned = text.trim();
+
+  // Simple cleanup for Markdown code blocks
+  if (cleaned.startsWith('```json')) cleaned = cleaned.replace(/^```json/, '');
+  if (cleaned.startsWith('```')) cleaned = cleaned.replace(/^```/, '');
+  if (cleaned.endsWith('```')) cleaned = cleaned.replace(/```$/, '');
+
+  cleaned = cleaned.trim();
+
+  // Robust extraction: Find the first { or [ and the last } or ]
+  const firstBrace = cleaned.indexOf('{');
+  const firstBracket = cleaned.indexOf('[');
+
+  let start = -1;
+  let end = -1;
+
+  if (firstBrace === -1 && firstBracket === -1) return cleaned; // No JSON markers found
+
+  // Determine if we are looking for object or array based on which comes first
+  if (firstBrace !== -1 && (firstBracket === -1 || firstBrace < firstBracket)) {
+    // It's likely an object
+    start = firstBrace;
+    end = cleaned.lastIndexOf('}');
+  } else {
+    // It's likely an array
+    start = firstBracket;
+    end = cleaned.lastIndexOf(']');
+  }
+
+  if (start !== -1 && end !== -1 && end > start) {
+    cleaned = cleaned.substring(start, end + 1);
+  }
+
+  return cleaned;
 };
 
 // System instruction to set the persona
@@ -60,6 +113,9 @@ GAYA BAHASA:
 PEDOMAN:
 Gunakan **teks tebal** untuk poin penting.
 Kaitkan dengan kehidupan sehari-hari siswa jika memungkinkan.
+
+REFERENSI MATERI (Gunakan jika relevan):
+${REFERENCE_CONTEXT}
 `;
 
 export const sendMessageToGemini = async (
@@ -69,10 +125,10 @@ export const sendMessageToGemini = async (
 ): Promise<string> => {
   try {
     const chat = ai.chats.create({
-      model: 'gemini-2.5-flash',
+      model: 'Gemini 2.5 Flash Lite',
       config: {
         systemInstruction: getSystemInstruction(user),
-        thinkingConfig: { thinkingBudget: 0 }, 
+        thinkingConfig: { thinkingBudget: 0 },
         temperature: 0.8, // Slightly higher for more creative/human response
       },
       history: history.map(msg => ({
@@ -103,6 +159,9 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
       4. **Logika Soal:** Pastikan premis soal dan pilihan jawaban memiliki hubungan logis yang kuat. Hindari ambiguitas.
       5. **Hindari Bias:** Gunakan bahasa yang objektif dan formal.
 
+      REFERENSI KURIKULUM:
+      ${REFERENCE_CONTEXT}
+
       STRUKTUR SOAL (TOTAL 10):
       1. 8 Soal Pilihan Ganda (MCQ):
          - 2 Soal LOTS (Pengetahuan Dasar).
@@ -117,7 +176,7 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash lite',
       contents: prompt,
       config: {
         systemInstruction: "Kamu adalah Editor Bahasa & Ahli Kurikulum SMK. Output JSON only.",
@@ -135,15 +194,15 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
               explanation: { type: Type.STRING },
               answerKey: { type: Type.STRING }
             },
-            // IMPORTANT: explanation added to required fields to ensure feedback works
-            required: ["type", "difficulty", "question", "explanation"] 
+            required: ["type", "difficulty", "question", "explanation"]
           }
         }
       }
     });
 
     if (response.text) {
-      const questions = JSON.parse(response.text) as QuizQuestion[];
+      const cleanText = cleanJson(response.text);
+      const questions = JSON.parse(cleanText) as QuizQuestion[];
       // Apply cleanup to questions and explanations
       return questions.map(q => ({
         ...q,
@@ -162,8 +221,8 @@ export const generateQuizQuestions = async (topic: string, user: UserProfile): P
 };
 
 export const evaluateEssayAnswer = async (
-  question: string, 
-  studentAnswer: string, 
+  question: string,
+  studentAnswer: string,
   answerKey: string
 ): Promise<{ status: 'CORRECT' | 'PARTIAL' | 'WRONG'; feedback: string }> => {
   try {
@@ -190,7 +249,7 @@ export const evaluateEssayAnswer = async (
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash lite lite',
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -206,302 +265,236 @@ export const evaluateEssayAnswer = async (
     });
 
     if (response.text) {
-      const result = JSON.parse(response.text);
+      const cleanText = cleanJson(response.text);
+      const result = JSON.parse(cleanText);
       return {
-          ...result,
-          feedback: formatContent(result.feedback)
+        status: result.status,
+        feedback: formatContent(result.feedback)
       };
     }
-    return { status: 'WRONG', feedback: "Gagal mengevaluasi jawaban." };
-
+    throw new Error("Empty response from AI");
   } catch (error) {
-    console.error("Essay Eval Error:", error);
-    return { status: 'WRONG', feedback: "Terjadi kesalahan sistem saat menilai." };
+    console.error("Gemini Essay Eval Error:", error);
+    return { status: 'PARTIAL', feedback: "Maaf, AI sedang sibuk. Jawabanmu sudah dicatat." };
   }
 };
 
 export const analyzeLearningProgress = async (history: QuizHistory[], user: UserProfile): Promise<string> => {
   try {
-    const historyText = history.map(h => 
-      `- Topik: ${h.topic}, Skor: ${Math.round((h.score/h.totalQuestions)*100)}%`
-    ).join("\n");
-
     const prompt = `
-      Data Belajar Siswa:
-      ${historyText}
-
-      Buat evaluasi "Learning Analytics":
-      1. Identifikasi Pola: Apakah siswa kuat di hafalan tapi lemah di analisis?
-      2. Rekomendasi Spesifik: Sarankan topik spesifik yang perlu diulang (Deep Dive).
-      3. Next Steps: Tantangan apa yang harus diambil selanjutnya.
+      Analisis progres belajar siswa bernama ${user.name} (${user.grade}).
       
-      Gunakan bahasa yang memotivasi tapi analitis.
+      RIWAYAT KUIS TERAKHIR:
+      ${JSON.stringify(history.map(h => ({
+      topic: h.topic,
+      score: h.score,
+      total: h.totalQuestions,
+      date: h.date
+    })))}
+      
+      Tugas:
+      1. Berikan Ringkasan Eksekutif tentang kekuatan & kelemahan siswa.
+      2. Rekomendasikan topik selanjutnya yang perlu dipelajari berdasarkan kelemahan (jika ada).
+      3. Gunakan gaya bahasa motivator yang konstruktif.
+      4. Maksimal 150 kata.
     `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash lite',
       contents: prompt,
       config: {
-        systemInstruction: getSystemInstruction(user),
         temperature: 0.7,
       }
     });
 
-    return formatContent(response.text) || "Belum ada data yang cukup untuk analisis.";
+    return formatContent(response.text || "Belum cukup data untuk analisis.");
   } catch (error) {
-    console.error("Gemini Analysis Error:", error);
-    return "Maaf, belum bisa menganalisis data saat ini.";
+    return "Analisis belum tersedia saat ini.";
   }
 };
 
 export const getLearningMaterial = async (topic: string, user: UserProfile): Promise<StudyMaterial | null> => {
   try {
-    const isEthicsTopic = topic.toLowerCase().includes('hukum') || topic.toLowerCase().includes('etika') || topic.toLowerCase().includes('uu');
-    const specificVideoUrl = isEthicsTopic ? "https://www.youtube.com/watch?v=qNskX8A5I90" : "";
-
     const prompt = `
-      Buatkan materi pembelajaran **DEEP LEARNING** (Mendalam & Komprehensif) untuk topik: "${topic}".
-      Target: Siswa ${user.grade} SMK TKJ (Teknik Komputer & Jaringan).
-      
-      INSTRUKSI KONTEN (DEEP LEARNING APPROACH):
-      Jangan hanya memberikan definisi kulit luar. Materi harus terstruktur untuk membangun pemahaman fundamental hingga implementasi.
-      
-      STRUKTUR JSON (Wajib):
-      1. **Introduction**: Pengantar menarik.
-      2. **Learning Objectives**: Array string berisi 3-5 tujuan pembelajaran spesifik (apa yang akan siswa kuasai).
-      3. **Sections** (Array):
-         - **Fundamental Concept (Why & What)**: Filosofi di balik teknologi ini.
-         - **Technical Mechanism (How it works)**: Penjelasan teknis mendalam.
-         - **Industry Implementation (Praktik Nyata)**: Contoh konfigurasi nyata (Cisco/Mikrotik/Linux).
-         - **Case Study & Troubleshooting**: Studi kasus kegagalan umum.
-      4. **Summary**: Rangkuman.
-      5. **Quiz**: 10 Soal (8 MCQ + 2 Essay).
+          Buat MODUL PEMBELAJARAN MENDALAM (Deep Learning Module) untuk topik: "${topic}".
+          Target: Siswa ${user.grade} SMK TKJ.
+          
+          Output MURNI JSON (Tanpa Markdown, Tanpa Penjelasan Tambahan).
+          Format:
+          {
+             "topic": "${topic}",
+             "introduction": "Pengantar konsep yang menarik & relevan dengan industri.",
+             "learningObjectives": ["Tujuan 1", "Tujuan 2", "Tujuan 3"],
+             "sections": [
+                { "subtitle": "Judul Sub-Bab", "content": "Isi materi detail dengan analogi & contoh teknis." }
+             ],
+             "summary": "Rangkuman padat.",
+             "youtubeUrl": "Link youtube relevan (ID saja)",
+             "quiz": [
+                { 
+                  "type": "MCQ", "difficulty": "LOTS", 
+                  "question": "...", "options": ["A", "B", "C", "D", "E"], 
+                  "correctAnswerIndex": 0, "explanation": "..." 
+                },
+                {
+                   "type": "ESSAY", "difficulty": "HOTS",
+                   "question": "Studi kasus analisis...",
+                   "answerKey": "Poin-poin jawaban yang diharapkan..."
+                }
+             ]
+          }
 
-      STRUKTUR MINI KUIS (Relevansi Tinggi):
-      Total **10 SOAL** (8 MCQ + 2 Essay) yang SANGAT RELEVAN dengan detail materi di atas.
-      - MCQ dengan 5 Opsi.
-      - Essay studi kasus HOTS dengan rubrik penilaian (answerKey).
-      - **PENTING UNTUK ESSAY**: Studi kasus WAJIB menggunakan konteks **"SMK AL-AZHAR SEMPU"**.
-        Contoh Essay: "Jaringan Laboratorium Komputer SMK AL-AZHAR SEMPU mengalami serangan DDoS saat ujian..." atau "Kepala Jurusan TKJ SMK AL-AZHAR SEMPU ingin menerapkan..."
-    `;
+          ATURAN:
+          1. Pastikan tidak ada karakter kontrol (newline/tab) literal di dalam string JSON. Gunakan escape sequence (\\n, \\t) jika perlu.
+          2. Pastikan materi mencakup implementasi dunia nyata (Real World Scenario).
+          Referensi: ${REFERENCE_CONTEXT}
+        `;
 
     const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
+      model: 'gemini-2.5-flash lite',
       contents: prompt,
       config: {
-        systemInstruction: "Kamu adalah Pakar Network Engineer & Instruktur Senior. Materi harus 'daging' (berbobot), teknis, dan aplikatif. Output JSON valid.",
         responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            topic: { type: Type.STRING },
-            introduction: { type: Type.STRING },
-            learningObjectives: { type: Type.ARRAY, items: { type: Type.STRING } }, // Added Learning Objectives
-            sections: {
-              type: Type.ARRAY,
-              items: {
-                type: Type.OBJECT,
-                properties: {
-                  subtitle: { type: Type.STRING },
-                  content: { type: Type.STRING }
-                },
-                required: ["subtitle", "content"]
-              }
-            },
-            summary: { type: Type.STRING },
-            imageUrl: { type: Type.STRING },
-            standards: { type: Type.ARRAY, items: { type: Type.STRING } },
-            quiz: {
-               type: Type.ARRAY,
-               items: {
-                 type: Type.OBJECT,
-                 properties: {
-                   type: { type: Type.STRING, enum: ["MCQ", "ESSAY"] }, 
-                   difficulty: { type: Type.STRING, enum: ["LOTS", "HOTS"] },
-                   question: { type: Type.STRING },
-                   options: { type: Type.ARRAY, items: { type: Type.STRING } },
-                   correctAnswerIndex: { type: Type.INTEGER },
-                   explanation: { type: Type.STRING },
-                   answerKey: { type: Type.STRING } 
-                 },
-                 required: ["question", "explanation", "type"]
-               }
-            }
-          },
-          required: ["topic", "introduction", "learningObjectives", "sections", "summary", "quiz"]
-        }
       }
     });
 
     if (response.text) {
-      const data = JSON.parse(response.text) as StudyMaterial;
-      if (!data.imageUrl) {
-          const keyword = topic.split(' ')[0] + ",server,network";
-          data.imageUrl = `https://source.unsplash.com/800x600/?${keyword}`;
+      const cleanText = cleanJson(response.text);
+      const data = JSON.parse(cleanText) as StudyMaterial;
+
+      // Apply Video Override from Map
+      if (TOPIC_VIDEO_MAP[topic]) {
+        data.youtubeUrl = TOPIC_VIDEO_MAP[topic];
       }
-      if (isEthicsTopic) data.youtubeUrl = specificVideoUrl;
 
-      // Clean Content using formatContent helper
-      data.introduction = formatContent(data.introduction);
-      data.summary = formatContent(data.summary);
-      data.learningObjectives = data.learningObjectives.map(obj => formatContent(obj));
-      data.sections = data.sections.map(s => ({
-          subtitle: formatContent(s.subtitle),
-          content: formatContent(s.content)
-      }));
-      data.quiz = data.quiz.map(q => ({
-          ...q,
-          question: formatContent(q.question),
-          explanation: q.explanation ? formatContent(q.explanation) : undefined,
-          answerKey: q.answerKey ? formatContent(q.answerKey) : undefined,
-          options: q.options ? q.options.map(o => formatContent(o)) : undefined
-      }));
-
-      return data;
+      return {
+        ...data,
+        introduction: formatContent(data.introduction),
+        summary: formatContent(data.summary),
+        sections: data.sections.map(s => ({ ...s, content: formatContent(s.content) }))
+      };
     }
     return null;
   } catch (error) {
-    console.error("Gemini Material Error:", error);
+    console.error("Gemini Learn Error:", error);
     return null;
   }
-};
+}
 
 export const generateGameScenario = async (user: UserProfile): Promise<GameScenario | null> => {
-    // Pick random topic from array of objects
-    const randomTopicObj = learningTopics[Math.floor(Math.random() * learningTopics.length)];
-    const randomTopic = randomTopicObj.title;
-
-    try {
-        const prompt = `
-            Buat skenario game "Cyber Defense" untuk siswa kelas ${user.grade}.
-            Topik: ${randomTopic}.
-            Buat skenario yang menegangkan dengan Time Limit.
-            Level: ${user.grade.includes('12') ? 'SULIT (Analisis Log & UU ITE)' : 'MENENGAH (Konfigurasi & Alat)'}.
+  try {
+    const prompt = `
+          Buat skenario game "Cyber Defense" untuk siswa SMK.
+          Topik: Keamanan Jaringan (Firewall, DDoS, Malware, Phishing).
+          
+          Format JSON:
+          {
+             "id": "...",
+             "topic": "Judul Skenario",
+             "situation": "Deskripsi masalah keamanan yang sedang terjadi...",
+             "severity": "LOW" | "MEDIUM" | "CRITICAL",
+             "options": [
+                { "text": "Opsi Solusi A", "isCorrect": boolean, "impact": "Dampak dari pilihan ini..." },
+                { "text": "Opsi Solusi B", "isCorrect": boolean, "impact": "..." },
+                { "text": "Opsi Solusi C", "isCorrect": boolean, "impact": "..." }
+             ]
+          }
         `;
-
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: prompt,
-            config: {
-                systemInstruction: "Game Master Cybersecurity.",
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        id: { type: Type.STRING },
-                        topic: { type: Type.STRING },
-                        situation: { type: Type.STRING },
-                        severity: { type: Type.STRING, enum: ["LOW", "MEDIUM", "CRITICAL"] },
-                        options: {
-                            type: Type.ARRAY,
-                            items: {
-                                type: Type.OBJECT,
-                                properties: {
-                                    text: { type: Type.STRING },
-                                    isCorrect: { type: Type.BOOLEAN },
-                                    impact: { type: Type.STRING }
-                                },
-                                required: ["text", "isCorrect", "impact"]
-                            }
-                        }
-                    },
-                    required: ["topic", "situation", "options", "severity"]
-                }
-            }
-        });
-
-        if (response.text) return JSON.parse(response.text) as GameScenario;
-        return null;
-
-    } catch (error) {
-        console.error("Gemini Game Error:", error);
-        return null;
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash lite',
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
+    if (response.text) {
+      const cleanText = cleanJson(response.text);
+      return JSON.parse(cleanText);
     }
+    return null;
+  } catch (e) { return null; }
 }
 
 export const generateSOCAlert = async (user: UserProfile): Promise<SOCAlert | null> => {
-    return generateGenericAIResponse<SOCAlert>(
-        "Buat Alert SOC realistis (True/False Positive) dengan log raw.",
-        "Security Analyst",
-        {
-          type: Type.OBJECT,
-          properties: {
-            id: { type: Type.STRING },
-            title: { type: Type.STRING },
-            timestamp: { type: Type.STRING },
-            severity: { type: Type.STRING },
-            sourceIp: { type: Type.STRING },
-            destinationIp: { type: Type.STRING },
-            logPayload: { type: Type.STRING },
-            hash: { type: Type.STRING },
-            isTruePositive: { type: Type.BOOLEAN },
-            analysisReport: { type: Type.STRING }
-          }
-        }
-    );
-};
-
-export const generateRedTeamMission = async (user: UserProfile): Promise<RedTeamMission | null> => {
-    return generateGenericAIResponse<RedTeamMission>(
-        "Buat misi Penetration Testing (Target, Ports, Vuln, Tools).",
-        "Red Team Instructor",
-        {
-            type: Type.OBJECT,
-            properties: {
-                id: { type: Type.STRING },
-                targetName: { type: Type.STRING },
-                targetIp: { type: Type.STRING },
-                os: { type: Type.STRING },
-                description: { type: Type.STRING },
-                openPorts: { type: Type.ARRAY, items: { type: Type.STRING } },
-                vulnerability: { type: Type.STRING },
-                availableTools: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: {type:Type.STRING}, name: {type:Type.STRING}, description:{type:Type.STRING}, type:{type:Type.STRING} } } },
-                correctToolId: { type: Type.STRING },
-                successMessage: { type: Type.STRING },
-                failureMessage: { type: Type.STRING }
-            }
-        }
-    );
-};
-
-export const generateKC7Case = async (user: UserProfile): Promise<KC7Case | null> => {
-    return generateGenericAIResponse<KC7Case>(
-        "Buat kasus investigasi log server (Blue Team).",
-        "Investigator",
-        {
-            type: Type.OBJECT,
-            properties: {
-                title: { type: Type.STRING },
-                description: { type: Type.STRING },
-                queryQuestion: { type: Type.STRING },
-                logs: { type: Type.ARRAY, items: { type: Type.OBJECT, properties: { id: {type:Type.INTEGER}, timestamp: {type:Type.STRING}, source: {type:Type.STRING}, event: {type:Type.STRING}, details: {type:Type.STRING}, isSuspicious: {type:Type.BOOLEAN} } } },
-                explanation: { type: Type.STRING }
-            }
-        }
-    );
+  try {
+    const prompt = `
+           Generate a SOC Alert Ticket (JSON) for a Cybersecurity Analyst simulation.
+           Fields: id, title, timestamp, severity (Low/Medium/High/Critical), sourceIp, destinationIp, logPayload (raw log simulation), hash (optional malware hash), isTruePositive (boolean), analysisReport (explanation).
+           Make it realistic for Enterprise Network environment.
+        `;
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash lite',
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
+    if (response.text) {
+      const cleanText = cleanJson(response.text);
+      return JSON.parse(cleanText);
+    }
+    return null;
+  } catch (e) { return null; }
 }
 
-// Helper for repetitive generic calls
-async function generateGenericAIResponse<T>(promptText: string, role: string, schema: any): Promise<T | null> {
-    try {
-        const response = await ai.models.generateContent({
-            model: 'gemini-2.5-flash',
-            contents: promptText,
-            config: {
-                systemInstruction: role,
-                responseMimeType: "application/json",
-                responseSchema: schema
-            }
-        });
-        if (response.text) {
-             const data = JSON.parse(response.text);
-             // Since this is generic, we try to clean common string fields if they exist
-             // But simpler to just return data as generic T, assuming structure matches
-             return data as T;
-        }
-        return null;
-    } catch (e) {
-        console.error(e);
-        return null;
+export const generateKC7Case = async (user: UserProfile): Promise<KC7Case | null> => {
+  try {
+    const prompt = `
+           Generate a KC7 Investigation Case (JSON).
+           Theme: Blue Team Log Analysis (SQL Injection, Brute Force, or Data Exfiltration).
+           Structure:
+           {
+             "title": "Case Title",
+             "description": "Brief briefing...",
+             "queryQuestion": "Find the specific log entry that shows...",
+             "logs": [
+                { "id": 1, "timestamp": "...", "source": "IP/User", "event": "Event Name", "details": "...", "isSuspicious": boolean }
+             ],
+             "explanation": "Why the suspicious log is the correct answer."
+           }
+           Generate about 10-15 logs, mixed normal and 1 suspicious.
+        `;
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash lite',
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
+    if (response.text) {
+      const cleanText = cleanJson(response.text);
+      return JSON.parse(cleanText);
     }
+    return null;
+  } catch (e) { return null; }
+}
+
+export const generateRedTeamMission = async (user: UserProfile): Promise<RedTeamMission | null> => {
+  try {
+    const prompt = `
+           Generate a Red Team Ops Mission (JSON).
+           Context: Ethical Hacking / Penetration Testing Simulation.
+           Structure:
+           {
+              "id": "...",
+              "targetName": "Target Server Name",
+              "targetIp": "10.10.x.x",
+              "os": "Linux/Windows",
+              "description": "Mission objective...",
+              "openPorts": ["22/tcp", "80/tcp"],
+              "vulnerability": "Hidden vuln description",
+              "availableTools": [
+                  { "id": "t1", "name": "Tool Name", "description": "...", "type": "SCAN" | "EXPLOIT" }
+              ],
+              "correctToolId": "id of the tool that works",
+              "successMessage": "Shell access granted...",
+              "failureMessage": "Connection refused..."
+           }
+           Provide 4 tools options, only 1 correct.
+        `;
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash lite',
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
+    if (response.text) {
+      const cleanText = cleanJson(response.text);
+      return JSON.parse(cleanText);
+    }
+    return null;
+  } catch (e) { return null; }
 }
